@@ -30,7 +30,7 @@
 //协议文件
 #include "onenet.h"
 #include "mqttkit.h"
-#include "cJSON.h"
+#include "property_json.h"
 //算法
 #include "base64.h"
 #include "hmac_sha1.h"
@@ -54,62 +54,6 @@ extern uint16_t light;
 extern float temp;
 
 void OneNET_Publish(const char *topic, const char *msg);
-
-static cJSON *OneNET_GetBoolNode(cJSON *root, const char *key)
-{
-	cJSON *node = NULL;
-	
-	if(root == NULL || key == NULL)
-		return NULL;
-	
-	node = cJSON_GetObjectItem(root, key);
-	if(node == NULL)
-		return NULL;
-	
-	if((node->type & 0xFF) == cJSON_Object)
-	{
-		cJSON *value_node = cJSON_GetObjectItem(node, "value");
-		if(value_node != NULL)
-			return value_node;
-	}
-	
-	return node;
-}
-
-static int OneNET_ParseBoolValue(cJSON *node, int *value)
-{
-	if(node == NULL || value == NULL)
-		return 0;
-	
-	if((node->type & 0xFF) == cJSON_True || (node->type & 0xFF) == cJSON_False)
-	{
-		*value = ((node->type & 0xFF) == cJSON_True) ? 1 : 0;
-		return 1;
-	}
-	
-	if((node->type & 0xFF) == cJSON_Number)
-	{
-		*value = (node->valuedouble != 0) ? 1 : 0;
-		return 1;
-	}
-	
-	if((node->type & 0xFF) == cJSON_String && node->valuestring != NULL)
-	{
-		if(strcmp(node->valuestring, "true") == 0 || strcmp(node->valuestring, "1") == 0)
-		{
-			*value = 1;
-			return 1;
-		}
-		
-		if(strcmp(node->valuestring, "false") == 0 || strcmp(node->valuestring, "0") == 0)
-		{
-			*value = 0;
-			return 1;
-		}
-	}
-	
-	return 0;
-}
 
 static void OneNET_ReplyPropertySet(const char *request_id, int code, const char *msg)
 {
@@ -385,15 +329,22 @@ extern uint8_t ledMode;
 
 unsigned char OneNet_FillBuf(char *buf)
 {
-	
+	int tenths;
 	char text[48];
+	float scaled = temp * 10.0f;
+	float fraction;
+	tenths = (int)scaled;
+	fraction = scaled - tenths;
+	if(fraction > 0.5f || (fraction == 0.5f && (tenths & 1))) tenths++;
+	if(fraction < -0.5f || (fraction == -0.5f && (tenths & 1))) tenths--;
 	
 	memset(text, 0, sizeof(text));
 	
 	strcpy(buf, "{\"id\":\"123\",\"params\":{");
 	
 	memset(text, 0, sizeof(text));
-	sprintf(text, "\"temp\":{\"value\":%.1f},",temp);
+	snprintf(text, sizeof(text), "\"temp\":{\"value\":%s%d.%d},",
+	         tenths < 0 ? "-" : "", abs(tenths / 10), abs(tenths % 10));
 	strcat(buf, text);
 	
 	memset(text, 0, sizeof(text));
@@ -521,7 +472,11 @@ void OneNET_Subscribe(void)
 //==========================================================
 void OneNet_RevPro(unsigned char *cmd)
 {
-	
+	static jsmntok_t tokens[32];
+	jsmn_parser parser;
+	char request_id[32] = "0";
+	int token_count, params_json, led_json, mode_json, id_json;
+	int id_length;
 	char *req_payload = NULL;
 	char *cmdid_topic = NULL;
 	unsigned short topic_len = 0;
@@ -534,11 +489,6 @@ void OneNet_RevPro(unsigned char *cmd)
 	int mode_value = 0;
 	int reply_code = 200;
 	const char *reply_msg = "success";
-	cJSON *raw_json = NULL;
-	cJSON *params_json = NULL;
-	cJSON *led_json = NULL;
-	cJSON *mode_json = NULL;
-	cJSON *id_json = NULL;
 	
 	type = MQTT_UnPacketRecv(cmd);
 	switch(type)
@@ -549,25 +499,38 @@ void OneNet_RevPro(unsigned char *cmd)
 			if(result == 0)
 			{
 				
-				raw_json=cJSON_Parse(req_payload);          //解析准换
-                if(raw_json == NULL)
-                {
-                    result = -1;
-                    break;
-                }
-				params_json=cJSON_GetObjectItem(raw_json,"params");  //提取onenet下发的数据
+				jsmn_init(&parser);
+				token_count = jsmn_parse(&parser, req_payload, req_len, tokens,
+				                         sizeof(tokens) / sizeof(tokens[0]));
+				if(token_count < 1 || tokens[0].type != JSMN_OBJECT)
+				{
+					MQTT_FreeBuffer(cmdid_topic);
+					MQTT_FreeBuffer(req_payload);
+					result = -1;
+					break;
+				}
+				params_json = OneNET_ObjectItem(req_payload, tokens, token_count, 0, "params");
 				
 				/* 如果params不存在，直接从根节点取 */
-				if(params_json == NULL)
-					params_json = raw_json;
+				if(params_json < 0)
+					params_json = 0;
 				
-				id_json = cJSON_GetObjectItem(raw_json, "id");
+				id_json = OneNET_ObjectItem(req_payload, tokens, token_count, 0, "id");
+				if(id_json >= 0 && tokens[id_json].type == JSMN_STRING)
+				{
+					id_length = tokens[id_json].end - tokens[id_json].start;
+					if(id_length >= 0 && id_length < sizeof(request_id))
+					{
+						memcpy(request_id, req_payload + tokens[id_json].start, id_length);
+						request_id[id_length] = '\0';
+					}
+				}
 				
 				/* mode命令：始终有效，任意模式下均可切换自动/手动 */
-				mode_json = OneNET_GetBoolNode(params_json, "mode");
-				if(mode_json != NULL)
+				mode_json = OneNET_GetBoolNode(req_payload, tokens, token_count, params_json, "mode");
+				if(mode_json >= 0)
 				{
-					if(OneNET_ParseBoolValue(mode_json, &mode_value))
+					if(OneNET_ParseBoolValue(req_payload, &tokens[mode_json], &mode_value))
 					{
 						ledMode = mode_value ? MODE_MANUAL : MODE_AUTO;
 					}
@@ -579,23 +542,23 @@ void OneNet_RevPro(unsigned char *cmd)
 				}
 				
 				/* led命令：仅在手动模式下有效，自动模式下忽略 */
-				led_json = OneNET_GetBoolNode(params_json, "led");
-				if(led_json != NULL)
+				led_json = OneNET_GetBoolNode(req_payload, tokens, token_count, params_json, "led");
+				if(led_json >= 0)
 				{
 					/* 收到led命令但没有同时下发mode时，自动切到手动模式 */
-					if(mode_json == NULL)
+					if(mode_json < 0)
 						ledMode = MODE_MANUAL;
 					
 					if(ledMode == MODE_MANUAL)
 					{
-						if(OneNET_ParseBoolValue(led_json, &led_value) && led_value)
+						if(OneNET_ParseBoolValue(req_payload, &tokens[led_json], &led_value) && led_value)
 						{
 							LED_Set(LED_ON);
 							ledState = 1;
 						}
 						else
 						{
-							if(!OneNET_ParseBoolValue(led_json, &led_value))
+							if(!OneNET_ParseBoolValue(req_payload, &tokens[led_json], &led_value))
 							{
 								reply_code = 400;
 								reply_msg = "invalid led value";
@@ -609,9 +572,7 @@ void OneNet_RevPro(unsigned char *cmd)
 					}
 				}
 				
-				OneNET_ReplyPropertySet((id_json && ((id_json->type & 0xFF) == cJSON_String)) ? id_json->valuestring : NULL,
-										reply_code, reply_msg);
-				cJSON_Delete(raw_json);
+				OneNET_ReplyPropertySet(request_id, reply_code, reply_msg);
 			}
 			
 			break;	/* 关键：防止穿透到下面的 PUBACK */

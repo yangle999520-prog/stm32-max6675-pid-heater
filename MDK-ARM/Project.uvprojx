@@ -336,7 +336,7 @@
               <MiscControls>--no-multibyte-chars</MiscControls>
               <Define>USE_HAL_DRIVER,STM32F030x6</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F0xx_HAL_Driver/Inc;../Drivers/STM32F0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F0xx/Include;../Drivers/CMSIS/Include;../board;../cjson;../MQTT;../onenet</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F0xx_HAL_Driver/Inc;../Drivers/STM32F0xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F0xx/Include;../Drivers/CMSIS/Include;../board;../MQTT;../onenet</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -904,16 +904,6 @@
               <FileName>onenet.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\onenet\onenet.c</FilePath>
-            </File>
-          </Files>
-        </Group>
-        <Group>
-          <GroupName>cjson</GroupName>
-          <Files>
-            <File>
-              <FileName>cJSON.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\cjson\cJSON.c</FilePath>
             </File>
           </Files>
         </Group>
