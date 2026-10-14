@@ -1,0 +1,38 @@
+# Java后端
+target/
+.idea/
+
+# Vue前端
+node_modules/
+
+# STM32工程
+# Keil 编译临时/中间文件
+*.bak
+*.ddk
+*.edk
+*.lst
+*.lnp
+*.mpf
+*.mpj
+*.obj
+*.omf
+*.plg
+*.rpt
+*.tmp
+*.__i
+*.crf
+*.o
+*.d
+*.axf
+*.tra
+*.dep
+*.iex
+*.htm
+*.sct
+*.map
+
+# JLink日志
+JLinkLog.txt
+
+# 保留工程配置（.opt 不忽略，对应脚本注释不删除）
+!*.opt
