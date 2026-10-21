@@ -27,6 +27,7 @@
 #include "OLED.h"
 //网络设备
 #include "esp8266.h"
+#include "device_credentials.h"
 //协议文件
 #include "onenet.h"
 #include "mqttkit.h"
@@ -35,23 +36,19 @@
 #include "base64.h"
 #include "hmac_sha1.h"
 //硬件驱动(HAL版本)
-#include "led.h"
+#include "pid.h"
 //C库
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#define PROID			"6x3n4Y0FuX"
-#define ACCESS_KEY		"YWRpSTh5V3IzVU1vZHd0Vkxyenl4ajVtQ3dWdTVqVVg="
-#define DEVICE_NAME		"D1"
 
 char devid[16];
 char key[48];
 extern unsigned char esp8266_buf[512];
 extern uint8_t ledMode;
-extern uint8_t ledState;
-extern uint16_t light;
-extern float temp;
+extern float WaterTemperature;
+extern PID_t WaterTemperaturePID;
 
 void OneNET_Publish(const char *topic, const char *msg);
 
@@ -318,50 +315,30 @@ _Bool OneNet_DevLink(void)
 	
 }
 
-extern  uint16_t light;
-extern float temp;
-// 外部全局变量，你需要在main或者其他地方定义
-extern uint8_t ledState;
-extern uint8_t ledMode;
-#define MODE_AUTO 0
 #define MODE_MANUAL 1
 
+static int OneNet_Tenths(float temperature)
+{
+	float scaled = temperature * 10.0f;
+	int tenths = (int)scaled;
+	float fraction = scaled - tenths;
+	if(fraction > 0.5f || (fraction == 0.5f && (tenths & 1))) tenths++;
+	if(fraction < -0.5f || (fraction == -0.5f && (tenths & 1))) tenths--;
+	return tenths;
+}
 
 unsigned char OneNet_FillBuf(char *buf)
 {
-	int tenths;
-	char text[48];
-	float scaled = temp * 10.0f;
-	float fraction;
-	tenths = (int)scaled;
-	fraction = scaled - tenths;
-	if(fraction > 0.5f || (fraction == 0.5f && (tenths & 1))) tenths++;
-	if(fraction < -0.5f || (fraction == -0.5f && (tenths & 1))) tenths--;
-	
-	memset(text, 0, sizeof(text));
-	
-	strcpy(buf, "{\"id\":\"123\",\"params\":{");
-	
-	memset(text, 0, sizeof(text));
-	snprintf(text, sizeof(text), "\"temp\":{\"value\":%s%d.%d},",
-	         tenths < 0 ? "-" : "", abs(tenths / 10), abs(tenths % 10));
-	strcat(buf, text);
-	
-	memset(text, 0, sizeof(text));
-	sprintf(text, "\"light\":{\"value\":%d},",light);
-	strcat(buf, text);
-	
-	memset(text, 0, sizeof(text));
-	sprintf(text, "\"led\":{\"value\":%s},",led_info.LED_Status?"true":"false");
-	strcat(buf, text);
-	
-	memset(text, 0, sizeof(text));
-	sprintf(text, "\"mode\":{\"value\":%s}",ledMode==MODE_MANUAL?"true":"false");
-	strcat(buf, text);
-	
-	strcat(buf, "}}");
-	
-	return strlen(buf);
+	int measured = OneNet_Tenths(WaterTemperature);
+	int target = OneNet_Tenths(WaterTemperaturePID.Target);
+	return (unsigned char)sprintf(buf,
+		"{\"id\":\"123\",\"params\":{"
+		"\"WaterTemperature\":{\"value\":%s%d.%d},"
+		"\"mode\":{\"value\":%s},"
+		"\"set_watertemp\":{\"value\":%s%d.%d}}}",
+		measured < 0 ? "-" : "", abs(measured / 10), abs(measured % 10),
+		ledMode == MODE_MANUAL ? "true" : "false",
+		target < 0 ? "-" : "", abs(target / 10), abs(target % 10));
 }
 
 //==========================================================
@@ -475,7 +452,7 @@ void OneNet_RevPro(unsigned char *cmd)
 	static jsmntok_t tokens[32];
 	jsmn_parser parser;
 	char request_id[32] = "0";
-	int token_count, params_json, led_json, mode_json, id_json;
+	int token_count, params_json, target_json, mode_json, id_json;
 	int id_length;
 	char *req_payload = NULL;
 	char *cmdid_topic = NULL;
@@ -485,8 +462,8 @@ void OneNet_RevPro(unsigned char *cmd)
 	static unsigned short pkt_id = 0;
 	unsigned char type = 0;
 	short result = 0;
-	int led_value = 0;
 	int mode_value = 0;
+	float target_value = 0.0f;
 	int reply_code = 200;
 	const char *reply_msg = "success";
 	
@@ -527,49 +504,30 @@ void OneNet_RevPro(unsigned char *cmd)
 				}
 				
 				/* mode命令：始终有效，任意模式下均可切换自动/手动 */
-				mode_json = OneNET_GetBoolNode(req_payload, tokens, token_count, params_json, "mode");
+				mode_json = OneNET_GetValueNode(req_payload, tokens, token_count, params_json, "mode");
 				if(mode_json >= 0)
 				{
-					if(OneNET_ParseBoolValue(req_payload, &tokens[mode_json], &mode_value))
-					{
-						ledMode = mode_value ? MODE_MANUAL : MODE_AUTO;
-					}
-					else
+					if(!OneNET_ParseBoolValue(req_payload, &tokens[mode_json], &mode_value))
 					{
 						reply_code = 400;
 						reply_msg = "invalid mode value";
 					}
 				}
 				
-				/* led命令：仅在手动模式下有效，自动模式下忽略 */
-				led_json = OneNET_GetBoolNode(req_payload, tokens, token_count, params_json, "led");
-				if(led_json >= 0)
+				target_json = OneNET_GetValueNode(req_payload, tokens, token_count,
+				                                params_json, "set_watertemp");
+				if(target_json >= 0)
 				{
-					/* 收到led命令但没有同时下发mode时，自动切到手动模式 */
-					if(mode_json < 0)
-						ledMode = MODE_MANUAL;
-					
-					if(ledMode == MODE_MANUAL)
+					if(!OneNET_ParseTemperatureValue(req_payload, &tokens[target_json], &target_value))
 					{
-						if(OneNET_ParseBoolValue(req_payload, &tokens[led_json], &led_value) && led_value)
-						{
-							LED_Set(LED_ON);
-							ledState = 1;
-						}
-						else
-						{
-							if(!OneNET_ParseBoolValue(req_payload, &tokens[led_json], &led_value))
-							{
-								reply_code = 400;
-								reply_msg = "invalid led value";
-							}
-							else
-							{
-								LED_Set(LED_OFF);
-								ledState = 0;
-							}
-						}
+						reply_code = 400;
+						reply_msg = "invalid set_watertemp value";
 					}
+				}
+				if(reply_code == 200)
+				{
+					if(mode_json >= 0) ledMode = mode_value ? MODE_MANUAL : 0;
+					if(target_json >= 0) WaterTemperaturePID.Target = target_value;
 				}
 				
 				OneNET_ReplyPropertySet(request_id, reply_code, reply_msg);

@@ -875,6 +875,16 @@
               <FileType>5</FileType>
               <FilePath>..\board\MAX6675.h</FilePath>
             </File>
+            <File>
+              <FileName>pid.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\board\pid.c</FilePath>
+            </File>
+            <File>
+              <FileName>pid.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\board\pid.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

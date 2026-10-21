@@ -30,7 +30,8 @@
 #include "esp8266.h"
 #include "onenet.h"
 #include <string.h>
-#include "MAX6675.h"  
+#include "MAX6675.h"
+#include "pid.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -65,9 +66,28 @@ void SystemClock_Config(void);
 uint8_t keynum;
 
 uint8_t ledMode = 0;
-uint8_t ledState = 0;
-uint16_t light = 0;
-float temp = 25.0f;
+float WaterTemperature = -1.0f;
+static uint32_t WaterTemperature_tick = 0;
+
+PID_t WaterTemperaturePID={
+	.Target=40,
+
+	.Kp=0,
+	.Ki=0,
+	.Kd=0,
+
+	.Error0=0,
+	.Error1=0,
+	.ErrorInt=0,
+
+	.OutMax=80,
+	.OutMin=0,
+};
+
+	uint32_t upload_tick = 0;
+	uint16_t val=0;
+	uint8_t val_flag=1;
+
 /* USER CODE END 0 */
 
 /**
@@ -78,7 +98,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  unsigned char *mqtt_data;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -101,41 +121,70 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   MX_SPI1_Init();
-  MX_TIM1_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+	/* CS is high after GPIO init; allow the first conversion to finish. */
+	WaterTemperature_tick = HAL_GetTick();
 	OLED_Init();
-	unsigned char *mqtt_data;
-	
+//	HAL_TIM_Base_Start_IT(&htim3);
+	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+	__HAL_TIM_ENABLE_IT(&htim3, TIM_IT_UPDATE);
+	PID_Init(&WaterTemperaturePID);
+	WaterTemperaturePID.Target = 40.0f;
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
+
 	ESP8266_Init();
-	while(OneNet_DevLink() != 0)
-        HAL_Delay(1000);
-    OneNET_Subscribe();
+	while (OneNet_DevLink() != 0)
+	{
+		HAL_Delay(1000);
+	}
+	OneNET_Subscribe();
+	upload_tick = HAL_GetTick();
+	OLED_Clear();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	uint32_t upload_tick = 0;
   while (1)
   {
 		keynum = Key_GetNum();
-		temp=MAX6675_ReadTemp();
-	
-	if(ESP8266_WaitRecive() == REV_OK)
-	{
-        mqtt_data = ESP8266_GetIPD(0);
-        if(mqtt_data != NULL)
-            OneNet_RevPro(mqtt_data);
-		ESP8266_Clear();
-	}
-	
-	if(HAL_GetTick() - upload_tick > 2000)
-	{
-		upload_tick = HAL_GetTick();
-		OneNet_SendData();
-	}
-	
-	
-	HAL_Delay(200);
+
+		/* Wait for conversion without blocking the main loop. */
+		if ((uint32_t)(HAL_GetTick() - WaterTemperature_tick) >= 250U)
+		{
+			WaterTemperature = MAX6675_ReadWaterTemperature();
+			/* A new conversion starts when the read releases CS. */
+			WaterTemperature_tick = HAL_GetTick();
+		}
+
+		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, val);	if(keynum==1){val+=100;}if(keynum==2){val-=100;}
+		if (WaterTemperature < 0.0f)
+		{
+			OLED_ShowString(1, 1, "ERR  ");
+		}
+		else
+		{
+			OLED_ShowNum(1, 1, (uint32_t)WaterTemperature, 5);
+		}
+		    OLED_ShowNum(2, 1,val,5);
+		if (ESP8266_WaitRecive() == REV_OK)
+		{
+			mqtt_data = ESP8266_GetIPD(0);
+			if (mqtt_data != NULL)
+			{
+				OneNet_RevPro(mqtt_data);
+			}
+			ESP8266_Clear();
+		}
+
+		if ((uint32_t)(HAL_GetTick() - upload_tick) >= 2000U)
+		{
+			upload_tick = HAL_GetTick();
+			OneNet_SendData();
+		}
+
+
+	HAL_Delay(20);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -189,6 +238,39 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if(htim->Instance == TIM3) //判断是不是TIM3的更新中断
+  {
+			Key_Tick();
+
+
+//			static uint8_t cnt;cnt++;
+//			if(cnt>=20)
+//			{
+//				cnt=0;
+//				if(val_flag)
+//				{
+//					val += 10;
+//					if(val >= 1000)
+//					{
+//						val = 1000;
+//						val_flag = 0;
+//					}
+//				}
+//				else
+//				{
+//					val -=10;
+//					if(val <= 0)
+//					{
+//						val = 0;
+//						val_flag = 1;
+//					}
+//				}
+//			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, val);
+//			}
+  }
+}
 
 /* USER CODE END 4 */
 

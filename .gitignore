@@ -6,6 +6,10 @@ target/
 node_modules/
 
 # STM32工程
+# Device-specific Wi-Fi and OneNET credentials stay on this machine.
+onenet/device_credentials.h
+MDK-ARM/Project/
+MDK-ARM/EventRecorderStub.scvd
 # Keil 编译临时/中间文件
 *.bak
 *.ddk

@@ -41,7 +41,7 @@ static int OneNET_ObjectItem(const char *json, const jsmntok_t *tokens,
 	return -1;
 }
 
-static int OneNET_GetBoolNode(const char *json, const jsmntok_t *tokens,
+static int OneNET_GetValueNode(const char *json, const jsmntok_t *tokens,
 				    int count, int object, const char *key)
 {
 	int node = OneNET_ObjectItem(json, tokens, count, object, key);
@@ -100,6 +100,40 @@ static int OneNET_ParseBoolValue(const char *json, const jsmntok_t *token, int *
 	}
 	if(p != end) return 0;
 	*value = nonzero;
+	return 1;
+}
+
+/* Parse the MAX6675 temperature range without pulling float scanf into flash. */
+static int OneNET_ParseTemperatureValue(const char *json, const jsmntok_t *token,
+					 float *value)
+{
+	const char *p = json + token->start;
+	const char *end = json + token->end;
+	float number = 0.0f;
+	float fraction = 0.1f;
+	int digits = 0;
+
+	if(token->type != JSMN_PRIMITIVE || p == end)
+		return 0;
+	while(p < end && *p >= '0' && *p <= '9')
+	{
+		number = number * 10.0f + (float)(*p++ - '0');
+		if(number > 1023.75f) return 0;
+		digits++;
+	}
+	if(digits == 0) return 0;
+	if(p < end && *p == '.')
+	{
+		p++;
+		if(p == end || *p < '0' || *p > '9') return 0;
+		while(p < end && *p >= '0' && *p <= '9')
+		{
+			number += (float)(*p++ - '0') * fraction;
+			fraction *= 0.1f;
+		}
+	}
+	if(p != end || number > 1023.75f) return 0;
+	*value = number;
 	return 1;
 }
 

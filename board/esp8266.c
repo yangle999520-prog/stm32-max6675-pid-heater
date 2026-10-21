@@ -2,6 +2,7 @@
 #include "main.h"
 //网络设备驱动
 #include "esp8266.h"
+#include "device_credentials.h"
 //硬件驱动
 #include "usart.h"
 #include "OLED.h"
@@ -9,7 +10,6 @@
 #include <string.h>
 #include <stdio.h>
 
-#define ESP8266_WIFI_INFO		"AT+CWJAP=\"yangle\",\"y1234567\"\r\n"
 unsigned char esp8266_buf[512];
 volatile unsigned short esp8266_cnt = 0;
 static uint8_t esp8266_rx_byte;

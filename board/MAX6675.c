@@ -1,19 +1,19 @@
-#include "main.h"  
-#include "MAX6675.h"  
-#include "spi.h" 
+#include "main.h"
+#include "MAX6675.h"
+#include "spi.h"
 
-float MAX6675_ReadTemp(void)
+float MAX6675_ReadWaterTemperature(void)
 {
     uint16_t tx = 0xFFFF;
     uint16_t data = 0;
 
-    HAL_Delay(250); 	
+    /* Call from the main loop, at least 250 ms after CS was released. */
     HAL_GPIO_WritePin(MAX6675_CS_GPIO_Port, MAX6675_CS_Pin, GPIO_PIN_RESET);
 
     if (HAL_SPI_TransmitReceive(&hspi1,
                                 (uint8_t *)&tx,
                                 (uint8_t *)&data,
-                                1, 100) != HAL_OK) 
+                                1, 5) != HAL_OK)
 		{
         HAL_GPIO_WritePin(MAX6675_CS_GPIO_Port, MAX6675_CS_Pin, GPIO_PIN_SET);
         return -1.0f;
@@ -21,7 +21,7 @@ float MAX6675_ReadTemp(void)
 
     HAL_GPIO_WritePin(MAX6675_CS_GPIO_Port, MAX6675_CS_Pin, GPIO_PIN_SET);
 
-    if (data & 0x0004) 
+    if (data & 0x0004)
 		{
         return -1.0f;  // »»µÁ≈º∂œœﬂ
     }
