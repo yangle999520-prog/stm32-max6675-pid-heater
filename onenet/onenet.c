@@ -24,7 +24,6 @@
 **/
 //单片机头文件 STM32F0 HAL库
 #include "stm32f0xx_hal.h"
-#include "OLED.h"
 //网络设备
 #include "esp8266.h"
 #include "device_credentials.h"
@@ -36,6 +35,7 @@
 volatile uint8_t onenet_link_state = 0;
 volatile uint16_t onenet_rx_count = 0;
 volatile uint8_t onenet_last_rx_type = 0;
+volatile uint32_t onenet_last_rx_tick = 0;
 //算法
 #include "base64.h"
 #include "hmac_sha1.h"
@@ -265,11 +265,9 @@ _Bool OneNet_DevLink(void)
 	
 	_Bool status = 1;
 
-    OLED_ShowString(2, 1, "TCP CONNECT     ");
     ESP8266_SendCmd("AT+CIPCLOSE\r\n", "OK");
     if(ESP8266_SendCmd("AT+CIPSTART=\"TCP\",\"mqtts.heclouds.com\",1883\r\n", "OK"))
     {
-        OLED_ShowString(2, 1, "TCP FAIL        ");
         return 1;
     }
 
@@ -277,10 +275,8 @@ _Bool OneNet_DevLink(void)
 	if(OneNET_Authorization("2018-10-31", PROID, 1956499200, ACCESS_KEY , DEVICE_NAME,
 								authorization_buf, sizeof(authorization_buf), 0) != 0)
     {
-        OLED_ShowString(2, 1, "TOKEN FAIL      ");
         return 1;
     }
-    OLED_ShowString(2, 1, "MQTT LOGIN      ");
 	
 	if(MQTT_PacketConnect(PROID, authorization_buf, DEVICE_NAME, 30, 1, MQTT_QOS_LEVEL0, NULL, NULL, 0, &mqttPacket) == 0)	// Keep Alive 30秒, OneNET约45秒判定离线
 	{
@@ -291,9 +287,8 @@ _Bool OneNet_DevLink(void)
 		{
 			if(MQTT_UnPacketRecv(dataPtr) == MQTT_PKT_CONNACK)
 			{
-				OLED_ShowString(3, 1, "CONNACK:        ");
-                OLED_ShowNum(3, 9, MQTT_UnPacketConnectAck(dataPtr), 1);
-				switch(MQTT_UnPacketConnectAck(dataPtr))
+				uint8_t connack = MQTT_UnPacketConnectAck(dataPtr);
+				switch(connack)
 				{
 					case 0:status = 0;break;
 					
@@ -308,15 +303,13 @@ _Bool OneNet_DevLink(void)
 			}
 		}
 		
-        if(dataPtr == NULL)
-            OLED_ShowString(3, 1, "NO CONNACK      ");
 		MQTT_DeleteBuffer(&mqttPacket);								//删包
 	}
 	
 	if(status == 0)
 	{
 		onenet_link_state = 1;
-        OLED_ShowString(2, 1, "ONENET ONLINE   ");
+		onenet_last_rx_tick = HAL_GetTick();
 	}
 	else
 	{
@@ -481,7 +474,10 @@ void OneNet_RevPro(unsigned char *cmd)
 	type = MQTT_UnPacketRecv(cmd);
 	onenet_last_rx_type = type;
 	if(type != 0)
+	{
 		onenet_rx_count++;
+		onenet_last_rx_tick = HAL_GetTick();
+	}
 	switch(type)
 	{
 		case MQTT_PKT_PUBLISH:																//接收的Publish消息

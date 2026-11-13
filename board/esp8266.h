@@ -17,6 +17,7 @@ _Bool ESP8266_WaitRecive(void);
 _Bool ESP8266_SendCmd(char *cmd, char *res);
 void ESP8266_SendData(unsigned char *data, unsigned short len);
 unsigned char *ESP8266_GetIPD(unsigned short timeOut);
+_Bool ESP8266_ConnectWiFi(void);
 void ESP8266_Init(void);
 
 #endif

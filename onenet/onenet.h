@@ -9,6 +9,7 @@ extern char key[48];
 extern volatile uint8_t onenet_link_state;
 extern volatile uint16_t onenet_rx_count;
 extern volatile uint8_t onenet_last_rx_type;
+extern volatile uint32_t onenet_last_rx_tick;
 
 bool OneNET_RegisterDevice(void);
 bool OneNet_DevLink(void);

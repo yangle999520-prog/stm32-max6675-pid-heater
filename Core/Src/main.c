@@ -32,6 +32,8 @@
 #include <string.h>
 #define TEMP_SAMPLE_MS 250U
 #define TEMP_STALE_MS 1000U
+#define ONENET_RECONNECT_MS 5000U
+#define ONENET_RX_TIMEOUT_MS 15000U
 #define PWM_MAX_COMPARE 95U
 #include "MAX6675.h"
 #include "pid.h"
@@ -92,6 +94,7 @@ PID_t WaterTemperaturePID={
 	uint32_t upload_tick = 0;
 	static uint32_t oled_log_tick = 0;
 	static uint32_t oled_value_tick = 0;
+	static uint32_t reconnect_tick = 0;
 	uint16_t val=0;
 	uint8_t previous_mode = 0;
 	float previous_target = 40.0f;
@@ -225,10 +228,47 @@ int main(void)
 			}
 			ESP8266_Clear();
 		}
+		if (onenet_link_state == 1U && esp8266_send_count != 0U &&
+		    esp8266_last_send_status != 1U)
+		{
+			onenet_link_state = 0U;
+		}
+		if (onenet_link_state == 1U &&
+		    (uint32_t)(HAL_GetTick() - onenet_last_rx_tick) > ONENET_RX_TIMEOUT_MS)
+		{
+			onenet_link_state = 0U;
+		}
+		if (onenet_link_state == 0U &&
+		    (uint32_t)(HAL_GetTick() - reconnect_tick) >= ONENET_RECONNECT_MS)
+		{
+			reconnect_tick = HAL_GetTick();
+			onenet_link_state = 2U;
+			if (ESP8266_ConnectWiFi() &&
+			    OneNet_DevLink() == 0)
+			{
+				OneNET_Subscribe();
+				if (esp8266_last_send_status == 1U)
+				{
+					onenet_link_state = 1U;
+					upload_tick = HAL_GetTick();
+					OLED_ShowString(2, 1, "SET:");
+					OLED_ShowString(2, 8, " OUT:");
+				}
+				else
+				{
+					onenet_link_state = 0U;
+				}
+			}
+			else
+			{
+				onenet_link_state = 0U;
+			}
+		}
 		if ((uint32_t)(HAL_GetTick() - oled_log_tick) >= 500U)
 		{
 			oled_log_tick = HAL_GetTick();
-			OLED_ShowString(3, 1, onenet_link_state ? "N:UP    " : "N:DOWN  ");
+			OLED_ShowString(3, 1, onenet_link_state == 1U ? "N:UP    " :
+			                (onenet_link_state == 2U ? "N:RETRY " : "N:DOWN  "));
 			OLED_ShowString(3, 8, "TX:");
 			OLED_ShowNum(3, 11, esp8266_send_count, 3);
 			OLED_ShowString(4, 1, "AT:");
@@ -240,7 +280,8 @@ int main(void)
 			OLED_ShowHexNum(4, 15, onenet_last_rx_type, 1);
 		}
 
-		if ((uint32_t)(HAL_GetTick() - upload_tick) >= 2000U)
+		if (onenet_link_state == 1U &&
+		    (uint32_t)(HAL_GetTick() - upload_tick) >= 2000U)
 		{
 			upload_tick = HAL_GetTick();
 			OneNet_SendData();

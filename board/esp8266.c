@@ -68,8 +68,10 @@ _Bool ESP8266_WaitRecive(void)
 _Bool ESP8266_SendCmd(char *cmd, char *res)
 {
 	uint32_t timeOut = 200;
-    if(strstr(cmd, "AT+CWJAP") || strstr(cmd, "AT+CIPSTART"))
-        timeOut = 2000;
+	if(strstr(cmd, "AT+CWJAP"))
+		timeOut = 1500;
+	else if(strstr(cmd, "AT+CIPSTART"))
+		timeOut = 1000;
     ESP8266_Clear();
 	// HAL�ⷢ���ַ�����huart1�Ǵ���2�����CubeMX���ɣ�
 	HAL_UART_Transmit(&huart1, (uint8_t *)cmd, strlen((const char *)cmd), 100);
@@ -171,6 +173,11 @@ unsigned char *ESP8266_GetIPD(unsigned short timeOut)
 //
 //	˵����		
 //==========================================================
+_Bool ESP8266_ConnectWiFi(void)
+{
+	return ESP8266_SendCmd(ESP8266_WIFI_INFO, "OK") == 0;
+}
+
 void ESP8266_Init(void)
 {
 	ESP8266_Clear();
@@ -193,7 +200,7 @@ void ESP8266_Init(void)
 	while(ESP8266_SendCmd("AT+CIPMODE=0\r\n", "OK"))
         HAL_Delay(500);
     OLED_ShowString(1, 1, "WIFI CONNECT    ");
-	while(ESP8266_SendCmd(ESP8266_WIFI_INFO, "OK"))
+	while(!ESP8266_ConnectWiFi())
 		HAL_Delay(500);
     OLED_ShowString(1, 1, "WIFI OK         ");
 	
