@@ -158,7 +158,7 @@ void SystemInit(void)
   *
   *         (*) HSI_VALUE is a constant defined in stm32f0xx_hal_conf.h file (default value
   *             8 MHz) but the real value may vary depending on the variations
-  *             in voltage and temperature.
+  *             in voltage and WaterTemperatureerature.
   *
   *         (**) HSE_VALUE is a constant defined in stm32f0xx_hal_conf.h file (its value
   *              depends on the application requirements), user has to ensure that HSE_VALUE
@@ -167,7 +167,7 @@ void SystemInit(void)
   *
   *         (***) HSI48_VALUE is a constant defined in stm32f0xx_hal_conf.h file (default value
   *             48 MHz) but the real value may vary depending on the variations
-  *             in voltage and temperature.
+  *             in voltage and WaterTemperatureerature.
   *
   *         - The result of this function could be not correct when using fractional
   *           value for HSE crystal.

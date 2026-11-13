@@ -30,6 +30,9 @@
 #include "esp8266.h"
 #include "onenet.h"
 #include <string.h>
+#define TEMP_SAMPLE_MS 250U
+#define TEMP_STALE_MS 1000U
+#define PWM_MAX_COMPARE 95U
 #include "MAX6675.h"
 #include "pid.h"
 /* USER CODE END Includes */
@@ -65,28 +68,31 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN 0 */
 uint8_t keynum;
 
-uint8_t ledMode = 0;
+uint8_t mode = 0;
 float WaterTemperature = -1.0f;
 static uint32_t WaterTemperature_tick = 0;
+static volatile uint32_t WaterTemperature_valid_tick = 0;
+static volatile uint8_t WaterTemperature_valid = 0;
 
 PID_t WaterTemperaturePID={
 	.Target=40,
 
-	.Kp=0,
-	.Ki=0,
-	.Kd=0,
+	.Kp=5.0f,
+	.Ki=0.125f,
+	.Kd=0.0f,
 
 	.Error0=0,
 	.Error1=0,
 	.ErrorInt=0,
 
-	.OutMax=80,
+	.OutMax=PWM_MAX_COMPARE,
 	.OutMin=0,
 };
 
 	uint32_t upload_tick = 0;
 	uint16_t val=0;
-	uint8_t val_flag=1;
+	uint8_t previous_mode = 0;
+	float previous_target = 40.0f;
 
 /* USER CODE END 0 */
 
@@ -125,6 +131,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 	/* CS is high after GPIO init; allow the first conversion to finish. */
 	WaterTemperature_tick = HAL_GetTick();
+	WaterTemperature_valid_tick = WaterTemperature_tick;
 	OLED_Init();
 //	HAL_TIM_Base_Start_IT(&htim3);
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
@@ -149,15 +156,46 @@ int main(void)
   {
 		keynum = Key_GetNum();
 
-		/* Wait for conversion without blocking the main loop. */
-		if ((uint32_t)(HAL_GetTick() - WaterTemperature_tick) >= 250U)
-		{
-			WaterTemperature = MAX6675_ReadWaterTemperature();
-			/* A new conversion starts when the read releases CS. */
-			WaterTemperature_tick = HAL_GetTick();
-		}
-
-		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, val);	if(keynum==1){val+=100;}if(keynum==2){val-=100;}
+        /* Manual keys adjust PWM duty in 10-count steps. */
+        if (mode == 1U) {
+            if (keynum == 1U && val < PWM_MAX_COMPARE) {
+                val += 10U;
+                if (val > PWM_MAX_COMPARE) val = PWM_MAX_COMPARE;
+            }
+            if (keynum == 2U) val = val >= 10U ? val - 10U : 0U;
+        }
+        if (mode != previous_mode || WaterTemperaturePID.Target != previous_target) {
+            PID_Reset(&WaterTemperaturePID);
+            previous_mode = mode;
+            previous_target = WaterTemperaturePID.Target;
+        }
+        /* Wait for conversion without blocking the main loop. */
+        if ((uint32_t)(HAL_GetTick() - WaterTemperature_tick) >= TEMP_SAMPLE_MS) {
+            WaterTemperature = MAX6675_ReadWaterTemperature();
+            WaterTemperature_tick = HAL_GetTick();
+            if (WaterTemperature >= 0.0f) {
+                WaterTemperature_valid = 1U;
+                WaterTemperature_valid_tick = WaterTemperature_tick;
+                if (mode == 0U && WaterTemperaturePID.Target > 0.0f) {
+                    WaterTemperaturePID.Actual = WaterTemperature;
+                    PID_Update(&WaterTemperaturePID);
+                }
+            } else {
+                WaterTemperature_valid = 0U;
+                PID_Reset(&WaterTemperaturePID);
+            }
+        }
+        /* Fault, stale sample, or zero setpoint disables heating in both modes. */
+        if (WaterTemperature_valid == 0U ||
+            (uint32_t)(HAL_GetTick() - WaterTemperature_valid_tick) > TEMP_STALE_MS ||
+            (mode == 0U && WaterTemperaturePID.Target <= 0.0f)) {
+            PID_Reset(&WaterTemperaturePID);
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0U);
+        } else {
+//					            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0U);
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1,
+                mode == 1U ? val : (uint16_t)WaterTemperaturePID.Out);
+        }
 		if (WaterTemperature < 0.0f)
 		{
 			OLED_ShowString(1, 1, "ERR  ");
@@ -166,7 +204,8 @@ int main(void)
 		{
 			OLED_ShowNum(1, 1, (uint32_t)WaterTemperature, 5);
 		}
-		    OLED_ShowNum(2, 1,val,5);
+		    OLED_ShowNum(2, 1,
+                mode == 1U ? val : (uint16_t)WaterTemperaturePID.Out, 5);
 		if (ESP8266_WaitRecive() == REV_OK)
 		{
 			mqtt_data = ESP8266_GetIPD(0);
@@ -205,12 +244,11 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL12;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL6;
   RCC_OscInitStruct.PLL.PREDIV = RCC_PREDIV_DIV1;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -243,32 +281,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if(htim->Instance == TIM3) //判断是不是TIM3的更新中断
   {
 			Key_Tick();
-
-
-//			static uint8_t cnt;cnt++;
-//			if(cnt>=20)
-//			{
-//				cnt=0;
-//				if(val_flag)
-//				{
-//					val += 10;
-//					if(val >= 1000)
-//					{
-//						val = 1000;
-//						val_flag = 0;
-//					}
-//				}
-//				else
-//				{
-//					val -=10;
-//					if(val <= 0)
-//					{
-//						val = 0;
-//						val_flag = 1;
-//					}
-//				}
-//			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, val);
-//			}
+            /* Interrupt watchdog also runs during blocking OneNET calls. */
+            if (WaterTemperature_valid == 0U ||
+                (uint32_t)(HAL_GetTick() - WaterTemperature_valid_tick) > TEMP_STALE_MS)
+                __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, (uint16_t)WaterTemperaturePID.Out);
   }
 }
 

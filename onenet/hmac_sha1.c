@@ -17,7 +17,7 @@ static uint32_t rol(uint32_t x, unsigned int n)
 
 static void sha1_block(SHA1_Context *ctx)
 {
-    uint32_t w[16], a, b, c, d, e, f, k, temp;
+    uint32_t w[16], a, b, c, d, e, f, k, WaterTemperature;
     unsigned int t, j;
     for(t = 0; t < 16; t++) {
         j = 4 * t;
@@ -35,8 +35,8 @@ static void sha1_block(SHA1_Context *ctx)
         else if(t < 40) { f = b ^ c ^ d; k = 0x6ed9eba1; }
         else if(t < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8f1bbcdc; }
         else { f = b ^ c ^ d; k = 0xca62c1d6; }
-        temp = rol(a, 5) + f + e + k + w[t & 15];
-        e = d; d = c; c = rol(b, 30); b = a; a = temp;
+        WaterTemperature = rol(a, 5) + f + e + k + w[t & 15];
+        e = d; d = c; c = rol(b, 30); b = a; a = WaterTemperature;
     }
     ctx->h[0] += a; ctx->h[1] += b; ctx->h[2] += c;
     ctx->h[3] += d; ctx->h[4] += e;

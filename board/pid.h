@@ -1,24 +1,13 @@
 #ifndef __PID_H
 #define __PID_H
-
-typedef struct {		//定义PID结构体变量类型
-	float Target;		//目标值，由用户设定
-	float Actual;		//实际值，从传感器读取
-	float Out;			//输出值，作用于执行器
-
-	float Kp;			//比例项权重
-	float Ki;			//积分项权重
-	float Kd;			//微分项权重
-
-	float Error0;		//本次误差
-	float Error1;		//上次误差
-	float ErrorInt;		//误差积分
-
-	float OutMax;		//输出限幅的最大值
-	float OutMin;		//输出限幅的最小值
+/* Kp: counts/C; Ki: counts/(C*s); Kd: counts*s/C. */
+typedef struct {
+ float Target, Actual, Out;
+ float Kp, Ki, Kd;
+ float Error0, Error1, ErrorInt;
+ float OutMax, OutMin;
 } PID_t;
-
 void PID_Init(PID_t *p);
-void PID_Update(PID_t *p);
-
+void PID_Reset(PID_t *p);
+void PID_Update(PID_t *p); /* Once per valid 250 ms sample. */
 #endif

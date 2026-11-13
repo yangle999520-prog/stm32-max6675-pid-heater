@@ -46,7 +46,7 @@
 char devid[16];
 char key[48];
 extern unsigned char esp8266_buf[512];
-extern uint8_t ledMode;
+extern uint8_t mode;
 extern float WaterTemperature;
 extern PID_t WaterTemperaturePID;
 
@@ -337,7 +337,7 @@ unsigned char OneNet_FillBuf(char *buf)
 		"\"mode\":{\"value\":%s},"
 		"\"set_watertemp\":{\"value\":%s%d.%d}}}",
 		measured < 0 ? "-" : "", abs(measured / 10), abs(measured % 10),
-		ledMode == MODE_MANUAL ? "true" : "false",
+		mode == MODE_MANUAL ? "true" : "false",
 		target < 0 ? "-" : "", abs(target / 10), abs(target % 10));
 }
 
@@ -526,7 +526,7 @@ void OneNet_RevPro(unsigned char *cmd)
 				}
 				if(reply_code == 200)
 				{
-					if(mode_json >= 0) ledMode = mode_value ? MODE_MANUAL : 0;
+					if(mode_json >= 0) mode = mode_value ? MODE_MANUAL : 0;
 					if(target_json >= 0) WaterTemperaturePID.Target = target_value;
 				}
 				
