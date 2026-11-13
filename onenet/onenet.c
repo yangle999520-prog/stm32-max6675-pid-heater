@@ -32,6 +32,10 @@
 #include "onenet.h"
 #include "mqttkit.h"
 #include "property_json.h"
+
+volatile uint8_t onenet_link_state = 0;
+volatile uint16_t onenet_rx_count = 0;
+volatile uint8_t onenet_last_rx_type = 0;
 //算法
 #include "base64.h"
 #include "hmac_sha1.h"
@@ -309,8 +313,15 @@ _Bool OneNet_DevLink(void)
 		MQTT_DeleteBuffer(&mqttPacket);								//删包
 	}
 	
-    if(status == 0)
+	if(status == 0)
+	{
+		onenet_link_state = 1;
         OLED_ShowString(2, 1, "ONENET ONLINE   ");
+	}
+	else
+	{
+		onenet_link_state = 0;
+	}
 	return status;
 	
 }
@@ -468,6 +479,9 @@ void OneNet_RevPro(unsigned char *cmd)
 	const char *reply_msg = "success";
 	
 	type = MQTT_UnPacketRecv(cmd);
+	onenet_last_rx_type = type;
+	if(type != 0)
+		onenet_rx_count++;
 	switch(type)
 	{
 		case MQTT_PKT_PUBLISH:																//接收的Publish消息

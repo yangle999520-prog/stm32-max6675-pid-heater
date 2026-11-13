@@ -9,6 +9,8 @@
 
 extern unsigned char esp8266_buf[512];
 extern volatile unsigned short esp8266_cnt;
+extern volatile uint8_t esp8266_last_send_status;
+extern volatile uint16_t esp8266_send_count;
 
 void ESP8266_Clear(void);
 _Bool ESP8266_WaitRecive(void);

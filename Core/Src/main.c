@@ -90,6 +90,8 @@ PID_t WaterTemperaturePID={
 };
 
 	uint32_t upload_tick = 0;
+	static uint32_t oled_log_tick = 0;
+	static uint32_t oled_value_tick = 0;
 	uint16_t val=0;
 	uint8_t previous_mode = 0;
 	float previous_target = 40.0f;
@@ -148,6 +150,10 @@ int main(void)
 	OneNET_Subscribe();
 	upload_tick = HAL_GetTick();
 	OLED_Clear();
+	OLED_ShowString(1, 1, "TEMP:");
+	OLED_ShowString(1, 9, " C");
+	OLED_ShowString(2, 1, "SET:");
+	OLED_ShowString(2, 8, " OUT:");
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -196,24 +202,42 @@ int main(void)
             __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1,
                 mode == 1U ? val : (uint16_t)WaterTemperaturePID.Out);
         }
-		if (WaterTemperature < 0.0f)
+		if ((uint32_t)(HAL_GetTick() - oled_value_tick) >= TEMP_SAMPLE_MS)
 		{
-			OLED_ShowString(1, 1, "ERR  ");
+			oled_value_tick = HAL_GetTick();
+			if (WaterTemperature < 0.0f)
+				OLED_ShowString(1, 6, "ERR");
+			else
+				OLED_ShowNum(1, 6, (uint32_t)WaterTemperature, 3);
+			OLED_ShowNum(2, 5, (uint32_t)WaterTemperaturePID.Target, 3);
+			OLED_ShowNum(2, 13,
+				mode == 1U ? val : (uint16_t)WaterTemperaturePID.Out, 3);
 		}
-		else
-		{
-			OLED_ShowNum(1, 1, (uint32_t)WaterTemperature, 5);
-		}
-		    OLED_ShowNum(2, 1,
-                mode == 1U ? val : (uint16_t)WaterTemperaturePID.Out, 5);
 		if (ESP8266_WaitRecive() == REV_OK)
 		{
+			if (strstr((char *)esp8266_buf, "WIFI DISCONNECT") != NULL ||
+			    strstr((char *)esp8266_buf, "CLOSED") != NULL)
+				onenet_link_state = 0;
 			mqtt_data = ESP8266_GetIPD(0);
 			if (mqtt_data != NULL)
 			{
 				OneNet_RevPro(mqtt_data);
 			}
 			ESP8266_Clear();
+		}
+		if ((uint32_t)(HAL_GetTick() - oled_log_tick) >= 500U)
+		{
+			oled_log_tick = HAL_GetTick();
+			OLED_ShowString(3, 1, onenet_link_state ? "N:UP    " : "N:DOWN  ");
+			OLED_ShowString(3, 8, "TX:");
+			OLED_ShowNum(3, 11, esp8266_send_count, 3);
+			OLED_ShowString(4, 1, "AT:");
+			OLED_ShowString(4, 4, esp8266_last_send_status == 1U ? "OK   " :
+			                 (esp8266_last_send_status == 2U ? "UART " : "PROM "));
+			OLED_ShowString(4, 9, "R:");
+			OLED_ShowNum(4, 11, onenet_rx_count, 2);
+			OLED_ShowString(4, 13, "T:");
+			OLED_ShowHexNum(4, 15, onenet_last_rx_type, 1);
 		}
 
 		if ((uint32_t)(HAL_GetTick() - upload_tick) >= 2000U)
