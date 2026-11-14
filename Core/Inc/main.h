@@ -61,8 +61,6 @@ void Error_Handler(void);
 #define MAX6675_CS_GPIO_Port GPIOA
 #define KEY1_Pin GPIO_PIN_0
 #define KEY1_GPIO_Port GPIOB
-#define KEY2_Pin GPIO_PIN_1
-#define KEY2_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

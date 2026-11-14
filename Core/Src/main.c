@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
@@ -36,6 +37,7 @@
 #define ONENET_RX_TIMEOUT_MS 15000
 #define PWM_MAX_COMPARE 95
 #include "MAX6675.h"
+#include "ntc.h"
 #include "pid.h"
 /* USER CODE END Includes */
 
@@ -133,6 +135,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_SPI1_Init();
   MX_TIM3_Init();
+  MX_ADC_Init();
   /* USER CODE BEGIN 2 */
 	/* CS is high after GPIO init; allow the first conversion to finish. */
 	WaterTemperature_tick = HAL_GetTick();
@@ -180,7 +183,7 @@ int main(void)
         }
         /* Wait for conversion without blocking the main loop. */
         if ((uint32_t)(HAL_GetTick() - WaterTemperature_tick) >= TEMP_SAMPLE_MS) {
-            WaterTemperature = MAX6675_ReadWaterTemperature();
+            WaterTemperature = NTC_GetTemp();
             WaterTemperature_tick = HAL_GetTick();
             if (WaterTemperature >= 0.0f) {
                 WaterTemperature_valid = 1;
@@ -309,8 +312,10 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI14|RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.HSI14State = RCC_HSI14_ON;
+  RCC_OscInitStruct.HSI14CalibrationValue = 16;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL6;

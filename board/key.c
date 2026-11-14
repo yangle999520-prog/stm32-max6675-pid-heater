@@ -32,10 +32,10 @@ uint8_t Key_GetState(void)
 	{
 		return 1;		//直接返回键码1
 	}
-	if (HAL_GPIO_ReadPin(GPIOB, KEY2_Pin) == 0)		//如果PB0引脚电平为0
-	{
-		return 2;		//直接返回键码2
-	}
+//	if (HAL_GPIO_ReadPin(GPIOB, KEY2_Pin) == 0)		//如果PB0引脚电平为0
+//	{
+//		return 2;		//直接返回键码2
+//	}
 	return 0;			//没有if成立，表示没有按键按下，默认返回0
 }
 
