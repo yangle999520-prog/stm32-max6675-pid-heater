@@ -856,16 +856,6 @@
               <FilePath>..\board\esp8266.c</FilePath>
             </File>
             <File>
-              <FileName>led.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\board\led.c</FilePath>
-            </File>
-            <File>
-              <FileName>led.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\board\led.h</FilePath>
-            </File>
-            <File>
               <FileName>MAX6675.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\board\MAX6675.c</FilePath>

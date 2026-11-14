@@ -30,11 +30,11 @@
 #include "esp8266.h"
 #include "onenet.h"
 #include <string.h>
-#define TEMP_SAMPLE_MS 250U
-#define TEMP_STALE_MS 1000U
-#define ONENET_RECONNECT_MS 5000U
-#define ONENET_RX_TIMEOUT_MS 15000U
-#define PWM_MAX_COMPARE 95U
+#define TEMP_SAMPLE_MS 250
+#define TEMP_STALE_MS 1000
+#define ONENET_RECONNECT_MS 5000
+#define ONENET_RX_TIMEOUT_MS 15000
+#define PWM_MAX_COMPARE 95
 #include "MAX6675.h"
 #include "pid.h"
 /* USER CODE END Includes */
@@ -166,12 +166,12 @@ int main(void)
 		keynum = Key_GetNum();
 
         /* Manual keys adjust PWM duty in 10-count steps. */
-        if (mode == 1U) {
-            if (keynum == 1U && val < PWM_MAX_COMPARE) {
-                val += 10U;
+        if (mode == 1) {
+            if (keynum == 1 && val < PWM_MAX_COMPARE) {
+                val += 10;
                 if (val > PWM_MAX_COMPARE) val = PWM_MAX_COMPARE;
             }
-            if (keynum == 2U) val = val >= 10U ? val - 10U : 0U;
+            if (keynum == 2) val = val >= 10 ? val - 10 : 0;
         }
         if (mode != previous_mode || WaterTemperaturePID.Target != previous_target) {
             PID_Reset(&WaterTemperaturePID);
@@ -183,27 +183,27 @@ int main(void)
             WaterTemperature = MAX6675_ReadWaterTemperature();
             WaterTemperature_tick = HAL_GetTick();
             if (WaterTemperature >= 0.0f) {
-                WaterTemperature_valid = 1U;
+                WaterTemperature_valid = 1;
                 WaterTemperature_valid_tick = WaterTemperature_tick;
-                if (mode == 0U && WaterTemperaturePID.Target > 0.0f) {
+                if (mode == 0 && WaterTemperaturePID.Target > 0.0f) {
                     WaterTemperaturePID.Actual = WaterTemperature;
                     PID_Update(&WaterTemperaturePID);
                 }
             } else {
-                WaterTemperature_valid = 0U;
+                WaterTemperature_valid = 0;
                 PID_Reset(&WaterTemperaturePID);
             }
         }
         /* Fault, stale sample, or zero setpoint disables heating in both modes. */
-        if (WaterTemperature_valid == 0U ||
+        if (WaterTemperature_valid == 0 ||
             (uint32_t)(HAL_GetTick() - WaterTemperature_valid_tick) > TEMP_STALE_MS ||
-            (mode == 0U && WaterTemperaturePID.Target <= 0.0f)) {
+            (mode == 0 && WaterTemperaturePID.Target <= 0.0f)) {
             PID_Reset(&WaterTemperaturePID);
-            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0U);
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
         } else {
-//					            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0U);
+//					            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
             __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1,
-                mode == 1U ? val : (uint16_t)WaterTemperaturePID.Out);
+                mode == 1 ? val : (uint16_t)WaterTemperaturePID.Out);
         }
 		if ((uint32_t)(HAL_GetTick() - oled_value_tick) >= TEMP_SAMPLE_MS)
 		{
@@ -214,7 +214,7 @@ int main(void)
 				OLED_ShowNum(1, 6, (uint32_t)WaterTemperature, 3);
 			OLED_ShowNum(2, 5, (uint32_t)WaterTemperaturePID.Target, 3);
 			OLED_ShowNum(2, 13,
-				mode == 1U ? val : (uint16_t)WaterTemperaturePID.Out, 3);
+				mode == 1 ? val : (uint16_t)WaterTemperaturePID.Out, 3);
 		}
 		if (ESP8266_WaitRecive() == REV_OK)
 		{
@@ -228,60 +228,60 @@ int main(void)
 			}
 			ESP8266_Clear();
 		}
-		if (onenet_link_state == 1U && esp8266_send_count != 0U &&
-		    esp8266_last_send_status != 1U)
+		if (onenet_link_state == 1 && esp8266_send_count != 0 &&
+		    esp8266_last_send_status != 1)
 		{
-			onenet_link_state = 0U;
+			onenet_link_state = 0;
 		}
-		if (onenet_link_state == 1U &&
+		if (onenet_link_state == 1 &&
 		    (uint32_t)(HAL_GetTick() - onenet_last_rx_tick) > ONENET_RX_TIMEOUT_MS)
 		{
-			onenet_link_state = 0U;
+			onenet_link_state = 0;
 		}
-		if (onenet_link_state == 0U &&
+		if (onenet_link_state == 0 &&
 		    (uint32_t)(HAL_GetTick() - reconnect_tick) >= ONENET_RECONNECT_MS)
 		{
 			reconnect_tick = HAL_GetTick();
-			onenet_link_state = 2U;
+			onenet_link_state = 2;
 			if (ESP8266_ConnectWiFi() &&
 			    OneNet_DevLink() == 0)
 			{
 				OneNET_Subscribe();
-				if (esp8266_last_send_status == 1U)
+				if (esp8266_last_send_status == 1)
 				{
-					onenet_link_state = 1U;
+					onenet_link_state = 1;
 					upload_tick = HAL_GetTick();
 					OLED_ShowString(2, 1, "SET:");
 					OLED_ShowString(2, 8, " OUT:");
 				}
 				else
 				{
-					onenet_link_state = 0U;
+					onenet_link_state = 0;
 				}
 			}
 			else
 			{
-				onenet_link_state = 0U;
+				onenet_link_state = 0;
 			}
 		}
-		if ((uint32_t)(HAL_GetTick() - oled_log_tick) >= 500U)
+		if ((uint32_t)(HAL_GetTick() - oled_log_tick) >= 500)
 		{
 			oled_log_tick = HAL_GetTick();
-			OLED_ShowString(3, 1, onenet_link_state == 1U ? "N:UP    " :
-			                (onenet_link_state == 2U ? "N:RETRY " : "N:DOWN  "));
+			OLED_ShowString(3, 1, onenet_link_state == 1 ? "N:UP    " :
+			                (onenet_link_state == 2 ? "N:RETRY " : "N:DOWN  "));
 			OLED_ShowString(3, 8, "TX:");
 			OLED_ShowNum(3, 11, esp8266_send_count, 3);
 			OLED_ShowString(4, 1, "AT:");
-			OLED_ShowString(4, 4, esp8266_last_send_status == 1U ? "OK   " :
-			                 (esp8266_last_send_status == 2U ? "UART " : "PROM "));
+			OLED_ShowString(4, 4, esp8266_last_send_status == 1 ? "OK   " :
+			                 (esp8266_last_send_status == 2 ? "UART " : "PROM "));
 			OLED_ShowString(4, 9, "R:");
 			OLED_ShowNum(4, 11, onenet_rx_count, 2);
 			OLED_ShowString(4, 13, "T:");
 			OLED_ShowHexNum(4, 15, onenet_last_rx_type, 1);
 		}
 
-		if (onenet_link_state == 1U &&
-		    (uint32_t)(HAL_GetTick() - upload_tick) >= 2000U)
+		if (onenet_link_state == 1 &&
+		    (uint32_t)(HAL_GetTick() - upload_tick) >= 2000)
 		{
 			upload_tick = HAL_GetTick();
 			OneNet_SendData();
@@ -347,7 +347,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   {
 			Key_Tick();
             /* Interrupt watchdog also runs during blocking OneNET calls. */
-            if (WaterTemperature_valid == 0U ||
+            if (WaterTemperature_valid == 0 ||
                 (uint32_t)(HAL_GetTick() - WaterTemperature_valid_tick) > TEMP_STALE_MS)
                 __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, (uint16_t)WaterTemperaturePID.Out);
   }

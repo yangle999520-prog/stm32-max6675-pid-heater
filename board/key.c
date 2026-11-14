@@ -10,13 +10,13 @@ uint8_t Key_Num;
   */
 uint8_t Key_GetNum(void)
 {
-	uint8_t WaterTemperature;			//定义一个临时变量用于中转
+	uint8_t Temp;			//定义一个临时变量用于中转
 	if (Key_Num)			//如果全局变量的键码不为0
 	{
 		/*这3句的目的是，实现读取键码并读后清零的效果*/
-		WaterTemperature = Key_Num;		//先把键码存入临时变量
+		Temp = Key_Num;		//先把键码存入临时变量
 		Key_Num = 0;		//键码清零
-		return WaterTemperature;		//返回临时变量，return语句执行后，函数直接结束
+		return Temp;		//返回临时变量，return语句执行后，函数直接结束
 	}
 	return 0;				//如果if不成立，键码为0，则默认返回0
 }
